@@ -6,6 +6,7 @@ from torch.optim import AdamW
 from pathlib import Path
 import argparse
 from tqdm import tqdm
+import warnings
 
 from utils import get_device, set_seed, image_to_grid, save_image
 from mnist import get_mnist_dls
@@ -50,7 +51,7 @@ def train_single_step(real_image, label, model, D_optim, G_optim, gp_weight, dev
     return D_loss, G_loss
 
 
-def train(n_epochs, train_dl, model, D_optim, G_optim, gp_weight, save_dir, device):
+def train(n_classes, n_epochs, train_dl, model, D_optim, G_optim, gp_weight, save_dir, device):
     for epoch in range(1, n_epochs + 1):
         cum_D_loss = 0
         cum_G_loss = 0
@@ -74,8 +75,13 @@ def train(n_epochs, train_dl, model, D_optim, G_optim, gp_weight, save_dir, devi
         log += f"[ G loss: {train_G_loss:.3f} ]"
         print(log)
 
-        gen_image = model.sample(batch_size=train_dl.batch_size, device=device)
-        gen_grid = image_to_grid(gen_image, n_cols=int(train_dl.batch_size ** 0.5))
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            label = torch.arange(
+                n_classes, dtype=torch.int32, device=device,
+            ).repeat_interleave(10)
+        gen_image = model.sample_using_label(label=label)
+        gen_grid = image_to_grid(gen_image, n_cols=n_classes)
         save_image(gen_grid, Path(save_dir)/f"epoch_{epoch}.jpg")
 
         torch.save(model.G.state_dict(), str(Path(save_dir)/f"epoch_{epoch}.pth"))
@@ -98,6 +104,7 @@ def main():
     G_optim = AdamW(G.parameters(), lr=args.LR)
 
     train(
+        n_classes=N_CLASSES,
         n_epochs=args.N_EPOCHS,
         train_dl=train_dl,
         model=model,

@@ -64,15 +64,12 @@ class Generator(nn.Module):
 
 
 class CGAN(nn.Module):
-    # def __init__(self, n_classes, latent_dim=100, hidden_dim=64):
     def __init__(self, D, G, n_classes, latent_dim=100):
         super().__init__()
 
         self.n_classes = n_classes
         self.latent_dim = latent_dim
 
-        # self.D = Discriminator(n_classes=n_classes, hidden_dim=hidden_dim)
-        # self.G = Generator(n_classes=n_classes, latent_dim=latent_dim, hidden_dim=hidden_dim)
         self.D = D
         self.G = G
 
@@ -134,12 +131,18 @@ class CGAN(nn.Module):
         D_loss2 = gp_weight * gp
         return D_loss1 + D_loss2
 
+    # def get_G_loss(self, label):
+    #     latent_vec = self.sample_latent_vec(batch_size=label.size(0), device=label.device)
+    #     fake_image = self.G(latent_vec=latent_vec, label=label)
+    #     pred = self.D(image=fake_image, label=label)
+    #     real_gt = torch.ones_like(pred, device=label.device)
+    #     return F.binary_cross_entropy_with_logits(pred, real_gt, reduction="mean")
+
     def get_G_loss(self, label):
         latent_vec = self.sample_latent_vec(batch_size=label.size(0), device=label.device)
         fake_image = self.G(latent_vec=latent_vec, label=label)
-        pred = self.D(image=fake_image, label=label)
-        real_gt = torch.ones_like(pred, device=label.device)
-        return F.binary_cross_entropy_with_logits(pred, real_gt, reduction="mean")
+        fake_pred = self.D(image=fake_image, label=label)
+        return -torch.mean(fake_pred)
 
     def get_loss(self, real_image, label):
         D_loss = self.get_D_loss(real_image=real_image, label=label)
