@@ -26,7 +26,7 @@ class Discriminator(nn.Module):
             nn.BatchNorm2d(hidden_dim * 4),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(hidden_dim * 4, 1, 4, 1, 0, bias=False),
-            nn.Sigmoid()
+            # nn.Sigmoid(),
         )
 
     def forward(self, image, label):
@@ -54,7 +54,7 @@ class Generator(nn.Module):
             nn.BatchNorm2d(hidden_dim),
             nn.ReLU(True),
             nn.ConvTranspose2d(hidden_dim, 1, 4, 2, 1, bias=False),
-            nn.Tanh()
+            nn.Tanh(),
         )
 
     def forward(self, latent_vec, label):
@@ -64,14 +64,17 @@ class Generator(nn.Module):
 
 
 class CGAN(nn.Module):
-    def __init__(self, n_classes, latent_dim=100, hidden_dim=64):
+    # def __init__(self, n_classes, latent_dim=100, hidden_dim=64):
+    def __init__(self, D, G, n_classes, latent_dim=100):
         super().__init__()
 
         self.n_classes = n_classes
         self.latent_dim = latent_dim
 
-        self.D = Discriminator(n_classes=n_classes, hidden_dim=hidden_dim)
-        self.G = Generator(n_classes=n_classes, latent_dim=latent_dim, hidden_dim=hidden_dim)
+        # self.D = Discriminator(n_classes=n_classes, hidden_dim=hidden_dim)
+        # self.G = Generator(n_classes=n_classes, latent_dim=latent_dim, hidden_dim=hidden_dim)
+        self.D = D
+        self.G = G
 
     def sample_latent_vec(self, batch_size, device):
         return torch.randn(size=(batch_size, self.latent_dim), device=device)
@@ -89,30 +92,57 @@ class CGAN(nn.Module):
         image = self.G(latent_vec=latent_vec, label=label)
         return image
 
-    def get_D_loss(self, real_image, real_label):
-        real_pred = self.D(image=real_image, label=real_label)
-        real_label = torch.ones_like(real_pred, device=real_image.device)
-        real_loss = F.binary_cross_entropy_with_logits(real_pred, real_label, reduction="mean")
+    def _get_gradient_penalty(self, real_image, fake_image, label):
+        eps = torch.rand((real_image.size(0), 1, 1, 1), device=real_image.device)
+        inter_image = eps * real_image + (1 - eps) * fake_image
+        inter_image.requires_grad = True
+        inter_pred = self.D(image=inter_image, label=label)
+
+        real_label = torch.ones_like(inter_pred, device=inter_pred.device)
+        grad = torch.autograd.grad(
+            outputs=inter_pred, inputs=inter_image, grad_outputs=real_label, create_graph=True, retain_graph=True,
+        )[0]
+        grad = grad.view(grad.size(0), -1)
+        gp = ((grad.norm(2, dim=1) - 1) ** 2).mean()
+        return gp
+
+    # def get_D_loss(self, real_image, label):
+    #     real_pred = self.D(image=real_image, label=label)
+    #     real_gt = torch.ones_like(real_pred, device=real_image.device)
+    #     real_loss = F.binary_cross_entropy_with_logits(real_pred, real_gt, reduction="mean")
+
+    #     batch_size = real_image.size(0)
+    #     latent_vec = self.sample_latent_vec(batch_size=batch_size, device=real_image.device)
+    #     fake_image = self.G(latent_vec=latent_vec, label=label)
+    #     fake_pred = self.D(image=fake_image, label=label)
+    #     fake_gt = torch.zeros_like(fake_pred, device=fake_image.device)
+    #     fake_loss = F.binary_cross_entropy_with_logits(fake_pred, fake_gt, reduction="mean")
+    #     return (real_loss + fake_loss) / 2
+
+    def get_D_loss(self, real_image, label, gp_weight):
+        real_pred = self.D(image=real_image, label=label)
 
         batch_size = real_image.size(0)
         latent_vec = self.sample_latent_vec(batch_size=batch_size, device=real_image.device)
-        fake_label = self.sample_label(batch_size=batch_size, device=real_image.device)
-        fake_image = self.G(latent_vec=latent_vec, label=fake_label)
-        fake_pred = self.D(image=fake_image, label=fake_label)
-        fake_label = torch.zeros_like(fake_pred, device=fake_image.device)
-        fake_loss = F.binary_cross_entropy_with_logits(fake_pred, fake_label, reduction="mean")
-        return (real_loss + fake_loss) / 2
+        fake_image = self.G(latent_vec=latent_vec, label=label)
+        fake_pred = self.D(image=fake_image.detach(), label=label)
+        D_loss1 = -torch.mean(real_pred) + torch.mean(fake_pred)
 
-    def get_G_loss(self, batch_size, device):
-        latent_vec = self.sample_latent_vec(batch_size=batch_size, device=device)
-        fake_label = self.sample_label(batch_size=batch_size, device=device)
-        fake_image = self.G(latent_vec=latent_vec, label=fake_label)
-        pred = self.D(image=fake_image, label=fake_label)
-        label = torch.ones_like(pred, device=fake_image.device)
-        return F.binary_cross_entropy_with_logits(pred, label, reduction="mean")
+        gp = self._get_gradient_penalty(
+            real_image=real_image, fake_image=fake_image.detach(), label=label,
+        )
+        D_loss2 = gp_weight * gp
+        return D_loss1 + D_loss2
 
-    def get_loss(self, real_image, real_label):
-        D_loss = self.get_D_loss(real_image=real_image, real_label=real_label)
+    def get_G_loss(self, label):
+        latent_vec = self.sample_latent_vec(batch_size=label.size(0), device=label.device)
+        fake_image = self.G(latent_vec=latent_vec, label=label)
+        pred = self.D(image=fake_image, label=label)
+        real_gt = torch.ones_like(pred, device=label.device)
+        return F.binary_cross_entropy_with_logits(pred, real_gt, reduction="mean")
+
+    def get_loss(self, real_image, label):
+        D_loss = self.get_D_loss(real_image=real_image, label=label)
         G_loss = self.get_G_loss(batch_size=real_image.size(0), device=real_image.device)
         return D_loss, G_loss
 

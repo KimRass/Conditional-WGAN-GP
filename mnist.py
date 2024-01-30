@@ -1,11 +1,11 @@
 from torchvision.datasets import MNIST
 import torchvision.transforms as T
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader
 
 
 def get_mnist_dls(data_dir, batch_size, n_cpus):
     transformer = T.Compose(
-        [T.Pad(padding=2), T.ToTensor(), T.Normalize(mean=0.5, std=0.5)]
+        [T.ToTensor(), T.Normalize(mean=0.5, std=0.5)]
     )
     train_ds = MNIST(root=data_dir, train=True, download=True, transform=transformer)
     test_ds = MNIST(root=data_dir, train=False, download=True, transform=transformer)
