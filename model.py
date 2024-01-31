@@ -3,7 +3,6 @@
 
 import torch
 from torch import nn
-from torch.nn import functional as F
 
 
 def one_hot_encode_label(label, n_classes):
@@ -11,7 +10,7 @@ def one_hot_encode_label(label, n_classes):
 
 
 class Discriminator(nn.Module):
-    def __init__(self, n_classes, hidden_dim=64):
+    def __init__(self, n_classes, hidden_dim):
         super().__init__()
 
         self.n_classes = n_classes
@@ -37,7 +36,7 @@ class Discriminator(nn.Module):
 
 
 class Generator(nn.Module):
-    def __init__(self, n_classes, latent_dim=100, hidden_dim=16):
+    def __init__(self, n_classes, hidden_dim, latent_dim=100):
         super().__init__()
 
         self.n_classes = n_classes
@@ -83,6 +82,10 @@ class ConditionalWGANsGP(nn.Module):
     def sample(self, batch_size, device):
         label = self.sample_label(batch_size=batch_size, device=device)
         return self.sample_using_label(label=label)
+
+    def generate_image(self, latent_vec, label):
+        image = self.G(latent_vec=latent_vec, label=label)
+        return image
 
     def sample_using_label(self, label):
         batch_size = label.size(0)

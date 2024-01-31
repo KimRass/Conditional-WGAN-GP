@@ -36,9 +36,9 @@ def denorm(tensor, mean, std):
     )
 
 
-def image_to_grid(image, n_cols, padding=1):
+def image_to_grid(image, mean, std, n_cols, padding=1):
     tensor = image.clone().detach().cpu()
-    tensor = denorm(tensor)
+    tensor = denorm(tensor, mean=mean, std=std)
     grid = make_grid(tensor, nrow=n_cols, padding=1, pad_value=padding)
     grid.clamp_(0, 1)
     grid = TF.to_pil_image(grid)

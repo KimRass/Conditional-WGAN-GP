@@ -20,6 +20,7 @@ def get_args(to_upperse=True):
     parser.add_argument("--n_epochs", type=int, default=200, required=False)
     parser.add_argument("--batch_size", type=int, default=256, required=False)
     parser.add_argument("--lr", type=float, default=0.0002, required=False)
+    parser.add_argument("--hidden_dim", type=int, default=32, required=False)
     parser.add_argument("--gp_weight", type=float, default=10, required=False)
     parser.add_argument("--data_dir", type=str, required=True)
     parser.add_argument("--save_dir", type=str, required=True)
@@ -35,9 +36,14 @@ def get_args(to_upperse=True):
     return args
 
 
-def train(
-    n_classes, n_epochs, train_dl, model, gp_weight, save_dir, device,
-):
+def train(n_classes, n_epochs, train_dl, model, gp_weight, save_dir, device):
+    fixed_latent_vec = model.sample_latent_vec(batch_size=n_classes * 10, device=device)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        fixed_label = torch.arange(
+            n_classes, dtype=torch.int32, device=device,
+        ).repeat_interleave(10)
+
     for epoch in range(1, n_epochs + 1):
         cum_D_loss = 0
         cum_G_loss = 0
@@ -58,15 +64,11 @@ def train(
         log += f"[ G loss: {train_G_loss:.2f} ]"
         print(log)
 
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            label = torch.arange(
-                n_classes, dtype=torch.int32, device=device,
-            ).repeat_interleave(10)
-        gen_image = model.sample_using_label(label=label)
-        gen_grid = image_to_grid(gen_image, n_cols=n_classes)
+        gen_image = model.generate_image(latent_vec=fixed_latent_vec, label=fixed_label)
+        gen_grid = image_to_grid(gen_image, mean=0.5, std=0.5, n_cols=n_classes)
         save_image(gen_grid, Path(save_dir)/f"epoch_{epoch}.jpg")
 
+        Path(save_dir).mkdir(parents=True, exist_ok=True)
         torch.save(model.G.state_dict(), str(Path(save_dir)/f"epoch_{epoch}.pth"))
 
 
@@ -80,13 +82,11 @@ def main():
     )
 
     N_CLASSES = 10
-    D = Discriminator(n_classes=N_CLASSES).to(DEVICE)
-    G = Generator(n_classes=N_CLASSES).to(DEVICE)
+    D = Discriminator(n_classes=N_CLASSES, hidden_dim=args.HIDDEN_DIM).to(DEVICE)
+    G = Generator(n_classes=N_CLASSES, hidden_dim=args.HIDDEN_DIM).to(DEVICE)
     D_optim = AdamW(D.parameters(), lr=args.LR)
     G_optim = AdamW(G.parameters(), lr=args.LR)
-    model = ConditionalWGANsGP(
-        D=D, G=G, D_optim=D_optim, G_optim=G_optim,
-    ).to(DEVICE)
+    model = ConditionalWGANsGP(D=D, G=G, D_optim=D_optim, G_optim=G_optim).to(DEVICE)
 
     train(
         n_classes=N_CLASSES,
