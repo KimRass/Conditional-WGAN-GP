@@ -2,7 +2,6 @@ import torch
 from torchvision.utils import make_grid
 import torchvision.transforms.functional as TF
 from PIL import Image
-from moviepy.video.io.bindings import mplfig_to_npimage
 from pathlib import Path
 import os
 import numpy as np
@@ -31,10 +30,10 @@ def set_seed(seed):
         torch.backends.cudnn.deterministic = True
 
 
-def denorm(tensor):
-    tensor /= 2
-    tensor += 0.5
-    return tensor
+def denorm(tensor, mean, std):
+    return TF.normalize(
+        tensor, mean=- np.array(mean) / np.array(std), std=1 / np.array(std),
+    )
 
 
 def image_to_grid(image, n_cols, padding=1):
@@ -58,9 +57,3 @@ def save_image(image, path):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     to_pil(image).save(str(path), quality=100)
-
-
-def plt_to_pil(fig):
-    img = mplfig_to_npimage(fig)
-    image = to_pil(img)
-    return image

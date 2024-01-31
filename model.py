@@ -26,7 +26,6 @@ class Discriminator(nn.Module):
             nn.BatchNorm2d(hidden_dim * 4),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(hidden_dim * 4, 1, 4, 1, 0, bias=False),
-            # nn.Sigmoid(),
         )
 
     def forward(self, image, label):
@@ -38,10 +37,11 @@ class Discriminator(nn.Module):
 
 
 class Generator(nn.Module):
-    def __init__(self, n_classes, latent_dim=100, hidden_dim=64):
+    def __init__(self, n_classes, latent_dim=100, hidden_dim=16):
         super().__init__()
 
         self.n_classes = n_classes
+        self.latent_dim = latent_dim
 
         self.main = nn.Sequential(
             nn.ConvTranspose2d(latent_dim + n_classes, hidden_dim * 4, 4, 1, 0, bias=False),
@@ -63,15 +63,16 @@ class Generator(nn.Module):
         return self.main(x[..., None, None])
 
 
-class CGAN(nn.Module):
-    def __init__(self, D, G, n_classes, latent_dim=100):
+class ConditionalWGANsGP(nn.Module):
+    def __init__(self, D, G, D_optim, G_optim):
         super().__init__()
-
-        self.n_classes = n_classes
-        self.latent_dim = latent_dim
 
         self.D = D
         self.G = G
+        self.D_optim = D_optim
+        self.G_optim = G_optim
+        self.n_classes = D.n_classes
+        self.latent_dim = G.latent_dim
 
     def sample_latent_vec(self, batch_size, device):
         return torch.randn(size=(batch_size, self.latent_dim), device=device)
@@ -90,31 +91,19 @@ class CGAN(nn.Module):
         return image
 
     def _get_gradient_penalty(self, real_image, fake_image, label):
-        eps = torch.rand((real_image.size(0), 1, 1, 1), device=real_image.device)
+        device = real_image.device
+        eps = torch.rand((real_image.size(0), 1, 1, 1), device=device)
         inter_image = eps * real_image + (1 - eps) * fake_image
         inter_image.requires_grad = True
         inter_pred = self.D(image=inter_image, label=label)
 
-        real_label = torch.ones_like(inter_pred, device=inter_pred.device)
+        real_label = torch.ones_like(inter_pred, device=device)
         grad = torch.autograd.grad(
             outputs=inter_pred, inputs=inter_image, grad_outputs=real_label, create_graph=True, retain_graph=True,
         )[0]
         grad = grad.view(grad.size(0), -1)
         gp = ((grad.norm(2, dim=1) - 1) ** 2).mean()
         return gp
-
-    # def get_D_loss(self, real_image, label):
-    #     real_pred = self.D(image=real_image, label=label)
-    #     real_gt = torch.ones_like(real_pred, device=real_image.device)
-    #     real_loss = F.binary_cross_entropy_with_logits(real_pred, real_gt, reduction="mean")
-
-    #     batch_size = real_image.size(0)
-    #     latent_vec = self.sample_latent_vec(batch_size=batch_size, device=real_image.device)
-    #     fake_image = self.G(latent_vec=latent_vec, label=label)
-    #     fake_pred = self.D(image=fake_image, label=label)
-    #     fake_gt = torch.zeros_like(fake_pred, device=fake_image.device)
-    #     fake_loss = F.binary_cross_entropy_with_logits(fake_pred, fake_gt, reduction="mean")
-    #     return (real_loss + fake_loss) / 2
 
     def get_D_loss(self, real_image, label, gp_weight):
         real_pred = self.D(image=real_image, label=label)
@@ -131,23 +120,32 @@ class CGAN(nn.Module):
         D_loss2 = gp_weight * gp
         return D_loss1 + D_loss2
 
-    # def get_G_loss(self, label):
-    #     latent_vec = self.sample_latent_vec(batch_size=label.size(0), device=label.device)
-    #     fake_image = self.G(latent_vec=latent_vec, label=label)
-    #     pred = self.D(image=fake_image, label=label)
-    #     real_gt = torch.ones_like(pred, device=label.device)
-    #     return F.binary_cross_entropy_with_logits(pred, real_gt, reduction="mean")
-
     def get_G_loss(self, label):
         latent_vec = self.sample_latent_vec(batch_size=label.size(0), device=label.device)
         fake_image = self.G(latent_vec=latent_vec, label=label)
         fake_pred = self.D(image=fake_image, label=label)
         return -torch.mean(fake_pred)
 
-    def get_loss(self, real_image, label):
-        D_loss = self.get_D_loss(real_image=real_image, label=label)
-        G_loss = self.get_G_loss(batch_size=real_image.size(0), device=real_image.device)
-        return D_loss, G_loss
+    def train_single_step(self, real_image, label, gp_weight, device, n_D_updates=1):
+        real_image = real_image.to(device)
+        label = label.to(device)
+
+        cum_D_loss = 0
+        for _ in range(n_D_updates):
+            D_loss = self.get_D_loss(
+                real_image=real_image, label=label, gp_weight=gp_weight,
+            )
+            self.D_optim.zero_grad()
+            D_loss.backward()
+            self.D_optim.step()
+
+            cum_D_loss += D_loss.item()
+        
+        G_loss = self.get_G_loss(label=label)
+        self.G_optim.zero_grad()
+        G_loss.backward()
+        self.G_optim.step()
+        return cum_D_loss / n_D_updates, G_loss.item()
 
 
 if __name__ == "__main__":
