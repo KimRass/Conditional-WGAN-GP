@@ -22,6 +22,7 @@ def get_args(to_upperse=True):
     parser.add_argument("--lr", type=float, default=0.0002, required=False)
     parser.add_argument("--hidden_dim", type=int, default=32, required=False)
     parser.add_argument("--gp_weight", type=float, default=10, required=False)
+    parser.add_argument("--n_d_updates", type=int, default=3, required=False)
     parser.add_argument("--data_dir", type=str, required=True)
     parser.add_argument("--save_dir", type=str, required=True)
 
@@ -36,7 +37,7 @@ def get_args(to_upperse=True):
     return args
 
 
-def train(n_classes, n_epochs, train_dl, model, gp_weight, save_dir, device):
+def train(n_classes, n_epochs, train_dl, model, gp_weight, save_dir, n_D_updates, device):
     fixed_latent_vec = model.sample_latent_vec(batch_size=n_classes * 10, device=device)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -53,6 +54,7 @@ def train(n_classes, n_epochs, train_dl, model, gp_weight, save_dir, device):
                 label=label,
                 gp_weight=gp_weight,
                 device=device,
+                n_D_updates=n_D_updates,
             )
             cum_D_loss += D_loss
             cum_G_loss += G_loss
@@ -95,6 +97,7 @@ def main():
         model=model,
         gp_weight=args.GP_WEIGHT,
         save_dir=args.SAVE_DIR,
+        n_D_updates=args.N_D_UPDATES,
         device=DEVICE,
     )
 

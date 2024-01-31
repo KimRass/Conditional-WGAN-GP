@@ -129,7 +129,7 @@ class ConditionalWGANsGP(nn.Module):
         fake_pred = self.D(image=fake_image, label=label)
         return -torch.mean(fake_pred)
 
-    def train_single_step(self, real_image, label, gp_weight, device, n_D_updates=1):
+    def train_single_step(self, real_image, label, gp_weight, n_D_updates, device):
         real_image = real_image.to(device)
         label = label.to(device)
 
