@@ -16,17 +16,31 @@ class Discriminator(nn.Module):
 
         self.n_classes = n_classes
 
+        self.label_embed = nn.Embedding(n_classes, n_classes)
+
         self.layers = nn.Sequential(
             nn.Conv2d(1 + n_classes, hidden_dim, 4, 2, 1, bias=False),
-            nn.LeakyReLU(0.2),
+            nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(hidden_dim, hidden_dim * 2, 4, 2, 1, bias=False),
             nn.BatchNorm2d(hidden_dim * 2),
-            nn.LeakyReLU(0.2),
+            nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(hidden_dim * 2, hidden_dim * 4, 3, 2, 1, bias=False),
             nn.BatchNorm2d(hidden_dim * 4),
-            nn.LeakyReLU(0.2),
+            nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(hidden_dim * 4, 1, 4, 1, 0, bias=False),
         )
+        # self.layers = nn.Sequential(
+        #     nn.Linear(794, 1024),
+        #     nn.LeakyReLU(0.2, inplace=True),
+        #     nn.Dropout(0.3),
+        #     nn.Linear(1024, 512),
+        #     nn.LeakyReLU(0.2, inplace=True),
+        #     nn.Dropout(0.3),
+        #     nn.Linear(512, 256),
+        #     nn.LeakyReLU(0.2, inplace=True),
+        #     nn.Dropout(0.3),
+        #     nn.Linear(256, 1),
+        # )
 
     def forward(self, image, label):
         ohe_label = one_hot_encode_label(label=label, n_classes=self.n_classes)
@@ -36,6 +50,22 @@ class Discriminator(nn.Module):
         x = x.view(-1, 1).squeeze(1)
         return x
 
+        # emb_label = self.label_embed(label)
+        # _, _, h, w = image.shape
+        # x = torch.cat([image, emb_label[..., None, None].repeat(1, 1, h, w)], dim=1)
+        # x = self.layers(x)
+        # x = x.view(-1, 1).squeeze(1)
+        # print(x.shape)
+        # return x
+
+        # x = image.view(image.size(0), 784)
+        # c = self.label_embed(label)
+        # x = torch.cat([x, c], 1)
+        # x = self.layers(x)
+        # x = x.squeeze(1)
+        # print(x.shape)
+        # return x
+
 
 class Generator(nn.Module):
     def __init__(self, n_classes, latent_dim, hidden_dim):
@@ -44,19 +74,31 @@ class Generator(nn.Module):
         self.n_classes = n_classes
         self.latent_dim = latent_dim
 
+        self.label_embed = nn.Embedding(n_classes, n_classes)
+
         self.layers = nn.Sequential(
             nn.ConvTranspose2d(latent_dim + n_classes, hidden_dim * 4, 4, 1, 0, bias=False),
             nn.BatchNorm2d(hidden_dim * 4),
-            nn.ReLU(),
-            nn.ConvTranspose2d(hidden_dim * 4, hidden_dim * 2, 3, 2, 1, bias=False),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(hidden_dim * 4, hidden_dim*2, 3, 2, 1, bias=False),
             nn.BatchNorm2d(hidden_dim * 2),
-            nn.ReLU(),
+            nn.ReLU(True),
             nn.ConvTranspose2d(hidden_dim * 2, hidden_dim, 4, 2, 1, bias=False),
             nn.BatchNorm2d(hidden_dim),
-            nn.ReLU(),
+            nn.ReLU(True),
             nn.ConvTranspose2d(hidden_dim, 1, 4, 2, 1, bias=False),
             nn.Tanh(),
         )
+        # self.layers = nn.Sequential(
+        #     nn.Linear(110, 256),
+        #     nn.LeakyReLU(0.2, inplace=True),
+        #     nn.Linear(256, 512),
+        #     nn.LeakyReLU(0.2, inplace=True),
+        #     nn.Linear(512, 1024),
+        #     nn.LeakyReLU(0.2, inplace=True),
+        #     nn.Linear(1024, 784),
+        #     nn.Tanh(),
+        # )
 
     def forward(self, latent_vec, label):
         ohe_label = one_hot_encode_label(label=label, n_classes=self.n_classes)
@@ -64,8 +106,22 @@ class Generator(nn.Module):
         x = self.layers(x[..., None, None])
         return x
 
+        # emb_label = self.label_embed(label)
+        # x = torch.cat([latent_vec, emb_label], dim=1)
+        # x = self.layers(x[..., None, None])
+        # print(x.shape)
+        # return x
 
-class ConditionalWGANGP(nn.Module):
+        # z = latent_vec.view(latent_vec.size(0), 100)
+        # c = self.label_embed(label)
+        # x = torch.cat([z, c], 1)
+        # x = self.layers(x)
+        # x = x.view(x.size(0), 1, 28, 28)
+        # print(x.shape)
+        # return x
+
+
+class ConditionalWGANsGP(nn.Module):
     def __init__(self, D, G, D_optim, G_optim):
         super().__init__()
 
@@ -118,13 +174,14 @@ class ConditionalWGANGP(nn.Module):
         latent_vec = self.sample_latent_vec(batch_size=batch_size, device=real_image.device)
         fake_image = self.G(latent_vec=latent_vec, label=label)
         fake_pred = self.D(image=fake_image.detach(), label=label)
-        D_adv_loss = -torch.mean(real_pred) + torch.mean(fake_pred)
+        D_loss1 = -torch.mean(real_pred) + torch.mean(fake_pred)
 
         gp = self._get_gradient_penalty(
             real_image=real_image, fake_image=fake_image.detach(), label=label,
         )
-        D_gp_loss = gp_weight * gp
-        return D_adv_loss + D_gp_loss
+        D_loss2 = gp_weight * gp
+        # print(D_loss1.shape, D_loss2.shape)
+        return D_loss1 + D_loss2
 
     def get_G_loss(self, label):
         latent_vec = self.sample_latent_vec(batch_size=label.size(0), device=label.device)

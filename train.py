@@ -9,8 +9,8 @@ from tqdm import tqdm
 import warnings
 
 from utils import get_device, set_seed, image_to_grid, save_image
-from mnist import get_mnist_dls
-from model import Discriminator, Generator, ConditionalWGANsGP
+from data import get_mnist_dls
+from model import Discriminator, Generator, ConditionalWGANGP
 
 
 def get_args(to_upperse=True):
@@ -20,11 +20,14 @@ def get_args(to_upperse=True):
     parser.add_argument("--n_epochs", type=int, default=200, required=False)
     parser.add_argument("--batch_size", type=int, default=256, required=False)
     parser.add_argument("--lr", type=float, default=0.0002, required=False)
-    parser.add_argument("--hidden_dim", type=int, default=32, required=False)
-    parser.add_argument("--gp_weight", type=float, default=10, required=False)
-    parser.add_argument("--n_d_updates", type=int, default=3, required=False)
     parser.add_argument("--data_dir", type=str, required=True)
     parser.add_argument("--save_dir", type=str, required=True)
+
+    parser.add_argument("--d_hidden_dim", type=int, default=64, required=False)
+    parser.add_argument("--g_latent_dim", type=int, default=100, required=False)
+    parser.add_argument("--g_hidden_dim", type=int, default=64, required=False)
+    parser.add_argument("--gp_weight", type=float, default=10, required=False)
+    parser.add_argument("--n_d_updates", type=int, default=3, required=False)
 
     args = parser.parse_args()
 
@@ -84,11 +87,13 @@ def main():
     )
 
     N_CLASSES = 10
-    D = Discriminator(n_classes=N_CLASSES, hidden_dim=args.HIDDEN_DIM).to(DEVICE)
-    G = Generator(n_classes=N_CLASSES, hidden_dim=args.HIDDEN_DIM).to(DEVICE)
+    D = Discriminator(n_classes=N_CLASSES, hidden_dim=args.D_HIDDEN_DIM).to(DEVICE)
+    G = Generator(
+        n_classes=N_CLASSES, latent_dim=args.G_LATENT_DIM, hidden_dim=args.G_HIDDEN_DIM,
+    ).to(DEVICE)
     D_optim = AdamW(D.parameters(), lr=args.LR)
     G_optim = AdamW(G.parameters(), lr=args.LR)
-    model = ConditionalWGANsGP(D=D, G=G, D_optim=D_optim, G_optim=G_optim).to(DEVICE)
+    model = ConditionalWGANGP(D=D, G=G, D_optim=D_optim, G_optim=G_optim).to(DEVICE)
 
     train(
         n_classes=N_CLASSES,

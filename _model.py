@@ -1,6 +1,5 @@
 # References:
     # https://github.com/AKASHKADEL/dcgan-mnist/blob/master/networks.py
-    # https://github.com/arturml/mnist-cgan/blob/master/mnist-cgan.ipynb
 
 import torch
 from torch import nn
@@ -16,15 +15,15 @@ class Discriminator(nn.Module):
 
         self.n_classes = n_classes
 
-        self.layers = nn.Sequential(
+        self.main = nn.Sequential(
             nn.Conv2d(1 + n_classes, hidden_dim, 4, 2, 1, bias=False),
-            nn.LeakyReLU(0.2),
+            nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(hidden_dim, hidden_dim * 2, 4, 2, 1, bias=False),
             nn.BatchNorm2d(hidden_dim * 2),
-            nn.LeakyReLU(0.2),
+            nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(hidden_dim * 2, hidden_dim * 4, 3, 2, 1, bias=False),
             nn.BatchNorm2d(hidden_dim * 4),
-            nn.LeakyReLU(0.2),
+            nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(hidden_dim * 4, 1, 4, 1, 0, bias=False),
         )
 
@@ -32,28 +31,27 @@ class Discriminator(nn.Module):
         ohe_label = one_hot_encode_label(label=label, n_classes=self.n_classes)
         _, _, h, w = image.shape
         x = torch.cat([image, ohe_label[..., None, None].repeat(1, 1, h, w)], dim=1)
-        x = self.layers(x)
-        x = x.view(-1, 1).squeeze(1)
-        return x
+        x = self.main(x)
+        return x.view(-1, 1).squeeze(1)
 
 
 class Generator(nn.Module):
-    def __init__(self, n_classes, latent_dim, hidden_dim):
+    def __init__(self, n_classes, hidden_dim, latent_dim=100):
         super().__init__()
 
         self.n_classes = n_classes
         self.latent_dim = latent_dim
 
-        self.layers = nn.Sequential(
+        self.main = nn.Sequential(
             nn.ConvTranspose2d(latent_dim + n_classes, hidden_dim * 4, 4, 1, 0, bias=False),
             nn.BatchNorm2d(hidden_dim * 4),
-            nn.ReLU(),
-            nn.ConvTranspose2d(hidden_dim * 4, hidden_dim * 2, 3, 2, 1, bias=False),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(hidden_dim * 4, hidden_dim*2, 3, 2, 1, bias=False),
             nn.BatchNorm2d(hidden_dim * 2),
-            nn.ReLU(),
+            nn.ReLU(True),
             nn.ConvTranspose2d(hidden_dim * 2, hidden_dim, 4, 2, 1, bias=False),
             nn.BatchNorm2d(hidden_dim),
-            nn.ReLU(),
+            nn.ReLU(True),
             nn.ConvTranspose2d(hidden_dim, 1, 4, 2, 1, bias=False),
             nn.Tanh(),
         )
@@ -61,11 +59,10 @@ class Generator(nn.Module):
     def forward(self, latent_vec, label):
         ohe_label = one_hot_encode_label(label=label, n_classes=self.n_classes)
         x = torch.cat([latent_vec, ohe_label], dim=1)
-        x = self.layers(x[..., None, None])
-        return x
+        return self.main(x[..., None, None])
 
 
-class ConditionalWGANGP(nn.Module):
+class ConditionalWGANsGP(nn.Module):
     def __init__(self, D, G, D_optim, G_optim):
         super().__init__()
 
@@ -118,13 +115,13 @@ class ConditionalWGANGP(nn.Module):
         latent_vec = self.sample_latent_vec(batch_size=batch_size, device=real_image.device)
         fake_image = self.G(latent_vec=latent_vec, label=label)
         fake_pred = self.D(image=fake_image.detach(), label=label)
-        D_adv_loss = -torch.mean(real_pred) + torch.mean(fake_pred)
+        D_loss1 = -torch.mean(real_pred) + torch.mean(fake_pred)
 
         gp = self._get_gradient_penalty(
             real_image=real_image, fake_image=fake_image.detach(), label=label,
         )
-        D_gp_loss = gp_weight * gp
-        return D_adv_loss + D_gp_loss
+        D_loss2 = gp_weight * gp
+        return D_loss1 + D_loss2
 
     def get_G_loss(self, label):
         latent_vec = self.sample_latent_vec(batch_size=label.size(0), device=label.device)
