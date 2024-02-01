@@ -10,29 +10,59 @@ def one_hot_encode_label(label, n_classes):
     return torch.eye(n_classes, device=label.device)[label]
 
 
+class ConvBlock(nn.Module):
+    def __init__(
+        self, channels, out_channels, kernel_size, stride, padding, transposed=False,
+    ):
+        super().__init__()
+
+        if transposed:
+            self.conv = nn.ConvTranspose2d(
+                channels,
+                out_channels,
+                kernel_size=kernel_size,
+                stride=stride,
+                padding=padding,
+                bias=False,
+            )
+        else:
+            self.conv = nn.Conv2d(
+                channels,
+                out_channels,
+                kernel_size=kernel_size,
+                stride=stride,
+                padding=padding,
+                bias=False,
+            )
+        self.norm = nn.BatchNorm2d(out_channels)
+        self.leaky_relu = nn.LeakyReLU(0.2)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.conv(x)
+        x = self.norm(x)
+        x = self.leaky_relu(x)
+        return x
+
+
 class Discriminator(nn.Module):
     def __init__(self, n_classes, hidden_dim):
         super().__init__()
 
         self.n_classes = n_classes
 
-        self.layers = nn.Sequential(
-            nn.Conv2d(1 + n_classes, hidden_dim, 4, 2, 1, bias=False),
-            nn.LeakyReLU(0.2),
-            nn.Conv2d(hidden_dim, hidden_dim * 2, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(hidden_dim * 2),
-            nn.LeakyReLU(0.2),
-            nn.Conv2d(hidden_dim * 2, hidden_dim * 4, 3, 2, 1, bias=False),
-            nn.BatchNorm2d(hidden_dim * 4),
-            nn.LeakyReLU(0.2),
-            nn.Conv2d(hidden_dim * 4, 1, 4, 1, 0, bias=False),
-        )
+        self.conv_block1 = ConvBlock(1 + n_classes, hidden_dim, 4, 2, 1, transposed=False)
+        self.conv_block2 = ConvBlock(hidden_dim, hidden_dim * 2, 4, 2, 1, transposed=False)
+        self.conv_block3 = ConvBlock(hidden_dim * 2, hidden_dim * 4, 3, 2, 1, transposed=False)
+        self.conv = nn.Conv2d(hidden_dim * 4, 1, 4, 1, 0)
 
     def forward(self, image, label):
         ohe_label = one_hot_encode_label(label=label, n_classes=self.n_classes)
         _, _, h, w = image.shape
         x = torch.cat([image, ohe_label[..., None, None].repeat(1, 1, h, w)], dim=1)
-        x = self.layers(x)
+        x = self.conv_block1(x)
+        x = self.conv_block2(x)
+        x = self.conv_block3(x)
+        x = self.conv(x)
         x = x.view(-1, 1).squeeze(1)
         return x
 
@@ -44,24 +74,19 @@ class Generator(nn.Module):
         self.n_classes = n_classes
         self.latent_dim = latent_dim
 
-        self.layers = nn.Sequential(
-            nn.ConvTranspose2d(latent_dim + n_classes, hidden_dim * 4, 4, 1, 0, bias=False),
-            nn.BatchNorm2d(hidden_dim * 4),
-            nn.ReLU(),
-            nn.ConvTranspose2d(hidden_dim * 4, hidden_dim * 2, 3, 2, 1, bias=False),
-            nn.BatchNorm2d(hidden_dim * 2),
-            nn.ReLU(),
-            nn.ConvTranspose2d(hidden_dim * 2, hidden_dim, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(hidden_dim),
-            nn.ReLU(),
-            nn.ConvTranspose2d(hidden_dim, 1, 4, 2, 1, bias=False),
-            nn.Tanh(),
-        )
+        self.conv_block1 = ConvBlock(latent_dim + n_classes, hidden_dim * 4, 4, 1, 0, transposed=True)
+        self.conv_block2 = ConvBlock(hidden_dim * 4, hidden_dim * 2, 3, 2, 1, transposed=True)
+        self.conv_block3 = ConvBlock(hidden_dim * 2, hidden_dim, 4, 2, 1, transposed=True)
+        self.conv = nn.ConvTranspose2d(hidden_dim, 1, 4, 2, 1)
 
     def forward(self, latent_vec, label):
         ohe_label = one_hot_encode_label(label=label, n_classes=self.n_classes)
         x = torch.cat([latent_vec, ohe_label], dim=1)
-        x = self.layers(x[..., None, None])
+        x = self.conv_block1(x[..., None, None])
+        x = self.conv_block2(x)
+        x = self.conv_block3(x)
+        x = self.conv(x)
+        x = torch.tanh(x)
         return x
 
 

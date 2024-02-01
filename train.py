@@ -17,15 +17,15 @@ def get_args(to_upperse=True):
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--seed", type=int, default=888, required=False)
-    parser.add_argument("--n_epochs", type=int, default=200, required=False)
-    parser.add_argument("--batch_size", type=int, default=256, required=False)
+    parser.add_argument("--n_epochs", type=int, default=50, required=False)
+    parser.add_argument("--batch_size", type=int, default=64, required=False)
     parser.add_argument("--lr", type=float, default=0.0002, required=False)
     parser.add_argument("--data_dir", type=str, required=True)
     parser.add_argument("--save_dir", type=str, required=True)
 
-    parser.add_argument("--d_hidden_dim", type=int, default=64, required=False)
+    parser.add_argument("--d_hidden_dim", type=int, default=32, required=False)
     parser.add_argument("--g_latent_dim", type=int, default=100, required=False)
-    parser.add_argument("--g_hidden_dim", type=int, default=64, required=False)
+    parser.add_argument("--g_hidden_dim", type=int, default=32, required=False)
     parser.add_argument("--gp_weight", type=float, default=10, required=False)
     parser.add_argument("--n_d_updates", type=int, default=3, required=False)
 
