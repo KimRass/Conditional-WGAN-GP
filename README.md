@@ -1,6 +1,7 @@
 # 1. Pre-trained Model
 - [cwgan_gp_mnist.pth](https://drive.google.com/file/d/1WsswjXwoe4h8eCL2vhIfNAMI97-Kr-3D/view?usp=sharing)
     ```python
+    seed=888
     n_epochs=50
     batch_size=64
     lr=0.0002
