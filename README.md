@@ -13,4 +13,4 @@
     ```
 
 # 2. Samples
-- <img src="https://github.com/KimRass/KimRass/assets/67457712/5b50540e-d4fd-41da-a163-f5b39a257fa2" width="700">
+- <img src="https://github.com/KimRass/KimRass/assets/67457712/5b50540e-d4fd-41da-a163-f5b39a257fa2" width="600">
