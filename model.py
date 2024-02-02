@@ -37,7 +37,7 @@ class ConvBlock(nn.Module):
         self.norm = nn.BatchNorm2d(out_channels)
         self.leaky_relu = nn.LeakyReLU(0.2)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x):
         x = self.conv(x)
         x = self.norm(x)
         x = self.leaky_relu(x)
