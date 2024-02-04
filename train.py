@@ -23,6 +23,7 @@ def get_args(to_upperse=True):
     parser.add_argument("--n_epochs", type=int, default=50, required=False)
     parser.add_argument("--batch_size", type=int, default=64, required=False)
     parser.add_argument("--lr", type=float, default=0.0002, required=False)
+    parser.add_argument("--n_cpus", default=0, required=False)
 
     parser.add_argument("--d_hidden_dim", type=int, default=32, required=False)
     parser.add_argument("--g_latent_dim", type=int, default=100, required=False)
@@ -84,7 +85,7 @@ def main():
     DEVICE = get_device()
 
     train_dl, _ = get_mnist_dls(
-        data_dir=args.DATA_DIR, batch_size=args.BATCH_SIZE, n_cpus=0,
+        data_dir=args.DATA_DIR, batch_size=args.BATCH_SIZE, n_cpus=args.N_CPUS,
     )
 
     N_CLASSES = 10
