@@ -6,10 +6,6 @@ import torch
 from torch import nn
 
 
-def one_hot_encode_label(label, n_classes):
-    return torch.eye(n_classes, device=label.device)[label]
-
-
 class ConvBlock(nn.Module):
     def __init__(
         self, channels, out_channels, kernel_size, stride, padding, transposed=False,
@@ -42,6 +38,10 @@ class ConvBlock(nn.Module):
         x = self.norm(x)
         x = self.leaky_relu(x)
         return x
+
+
+def one_hot_encode_label(label, n_classes):
+    return torch.eye(n_classes, device=label.device)[label]
 
 
 class Discriminator(nn.Module):
