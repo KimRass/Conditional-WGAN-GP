@@ -4,6 +4,11 @@
 
 import torch
 from torch import nn
+from ignite.metrics import FID
+from torchvision.models import inception_v3, Inception_V3_Weights
+import ssl
+
+ssl._create_default_https_context = ssl._create_unverified_context
 
 
 class ConvBlock(nn.Module):
@@ -16,18 +21,18 @@ class ConvBlock(nn.Module):
             self.conv = nn.ConvTranspose2d(
                 channels,
                 out_channels,
-                kernel_size=kernel_size,
-                stride=stride,
-                padding=padding,
+                kernel_size,
+                stride,
+                padding,
                 bias=False,
             )
         else:
             self.conv = nn.Conv2d(
                 channels,
                 out_channels,
-                kernel_size=kernel_size,
-                stride=stride,
-                padding=padding,
+                kernel_size,
+                stride,
+                padding,
                 bias=False,
             )
         self.norm = nn.BatchNorm2d(out_channels)
@@ -179,13 +184,18 @@ class ConditionalWGANGP(nn.Module):
         return cum_D_loss / n_D_updates, G_loss.item()
 
 
+device = torch.device("mps")
+inception_model = inception_v3(weights=Inception_V3_Weights.IMAGENET1K_V1).eval()
+FID(device=device)
+
+
 if __name__ == "__main__":
-        n_classes = 10
-        label = torch.randint(0, 10, size=(4,))
-        image = torch.randn((4, 1, 28, 28))
-        latent_vec = torch.randn((4, 100))
-        G = Generator(n_classes=n_classes)
-        D = Discriminator(n_classes=n_classes)
-        
-        G(latent_vec=latent_vec, label=label).shape
-        D(image=image, label=label).shape
+    n_classes = 10
+    label = torch.randint(0, 10, size=(4,))
+    image = torch.randn((4, 1, 28, 28))
+    latent_vec = torch.randn((4, 100))
+    G = Generator(n_classes=n_classes)
+    D = Discriminator(n_classes=n_classes)
+    
+    G(latent_vec=latent_vec, label=label).shape
+    D(image=image, label=label).shape
